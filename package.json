@@ -10,6 +10,7 @@
   "packageManager": "npm@10.8.1",
   "dependencies": {
     "dockerode": "^4.0.9",
+    "dotenv": "^17.4.2",
     "yaml": "^2.8.2",
     "zod": "^3.25.76"
   },

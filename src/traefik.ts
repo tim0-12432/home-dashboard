@@ -40,11 +40,9 @@ export async function getTraefikRoutes(
   for (const router of routers) {
     if (typeof router?.service !== 'string') continue;
 
-    const container = resolveService(router.service.split('@')[0], serviceMap);
-
-    if (!container) {
-      continue;
-    }
+    const serviceName = router.service.split('@')[0];
+    const container = resolveService(serviceName, serviceMap);
+    const key = container || serviceName;
 
     const rule = String(router.rule ?? '');
     const hostMatches = rule.matchAll(/Host\(([^)]+)\)/g);
@@ -59,7 +57,7 @@ export async function getTraefikRoutes(
     }
 
     const scheme = router.tls ? 'https://' : 'http://';
-    const existing = routes.get(container) ?? [];
+    const existing = routes.get(key) ?? [];
     const seen = new Set(existing.map((r) => r.host));
 
     const newRoutes = hosts
@@ -69,7 +67,7 @@ export async function getTraefikRoutes(
         host,
       }));
 
-    routes.set(container, [...existing, ...newRoutes]);
+    routes.set(key, [...existing, ...newRoutes]);
   }
 
   return routes;

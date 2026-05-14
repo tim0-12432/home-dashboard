@@ -76,16 +76,67 @@ export async function discoverApps(config: Config): Promise<App[]> {
     )
   ).filter((app) => app != null);
 
+  // Build apps from Traefik routes that don't correspond to a container
+  const containerNames = new Set(containers.map((c) => getContainerName(c)));
+  const traefikApps = Array.from(routeMap.entries())
+    .filter(([key]) => !containerNames.has(key))
+    .map(([name, routes]) => {
+      if (config.ignore?.includes(name)) {
+        return null;
+      }
+
+      const custom = config.apps?.find((app) => app.container === name);
+
+      const displayName =
+        custom?.name ??
+        name
+          .replace(/[-_]+/g, ' ')
+          .split(' ')
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ');
+
+      let url = custom?.url;
+
+      if (!url) {
+        const urls = routes
+          .map((route) => route.url)
+          .sort((a, b) => {
+            return (
+              (a.endsWith('.local') ? 1 : 0) - (b.endsWith('.local') ? 1 : 0)
+            );
+          });
+
+        url = urls?.[0];
+      }
+
+      if (!url) {
+        return null;
+      }
+
+      return {
+        id: name,
+        container: name,
+        image: undefined,
+        icon: `${name}.svg`,
+        name: displayName,
+        url,
+      };
+    })
+    .filter((app) => app != null);
+
   // Build apps from config entries without a container
+  const combinedApps = [...containerApps, ...traefikApps];
+
   const customApps = (
     await Promise.all(
       (config.apps ?? []).map(async (app) => {
         if (
           app.container &&
-          !containers.some((c) => getContainerName(c) === app.container)
+          !combinedApps.some((c) => c.container === app.container)
         ) {
           throw new Error(
-            `Configured app "${app.container}" not found among Docker containers.`
+            `Configured app "${app.container}" not found among Docker containers or Traefik routers.`
           );
         }
 
@@ -114,12 +165,12 @@ export async function discoverApps(config: Config): Promise<App[]> {
   ).filter((app) => app != null);
 
   const apps = [
-    ...containerApps.filter((app) =>
-      customApps.some((c) => c.container !== app.container)
+    ...combinedApps.filter((app) =>
+      !customApps.some((c) => c.container === app.container)
     ),
     ...customApps.map((app) => {
       if (app.container) {
-        const match = containerApps.find((c) => c.container === app.container);
+        const match = combinedApps.find((c) => c.container === app.container);
         return { ...match, ...app };
       }
 

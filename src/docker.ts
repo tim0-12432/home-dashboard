@@ -1,4 +1,7 @@
 import Docker from 'dockerode';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const DEFAULT_SOCKET = '/var/run/docker.sock';
 
