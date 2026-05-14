@@ -68,7 +68,7 @@ export async function discoverApps(config: Config): Promise<App[]> {
           id: name,
           container: name,
           image: getImageName(container),
-          icon: undefined,
+          icon: custom?.icon,
           name: displayName,
           url,
         };
@@ -118,7 +118,7 @@ export async function discoverApps(config: Config): Promise<App[]> {
         id: name,
         container: name,
         image: undefined,
-        icon: `${name}.svg`,
+        icon: custom?.icon ?? `${name}.svg`,
         name: displayName,
         url,
       };
@@ -292,6 +292,7 @@ let missedUpdates: IconUpdate[] = [];
 const iconListeners = new Set<IconListener>();
 const pendingDownloads = new Map<string, Promise<void>>();
 const attemptedDownloads = new Set<string>();
+const ongoingDownloads = new Map<string, Promise<boolean>>();
 
 function downloadIconFile(id: string, ...filenames: string[]) {
   if (pendingDownloads.has(id)) {
@@ -302,7 +303,13 @@ function downloadIconFile(id: string, ...filenames: string[]) {
     id,
     (async () => {
       for (const filename of filenames) {
-        if (await fetchIcon(id, filename)) {
+        if (await fetchIcon(filename)) {
+          const update = { id, icon: filename };
+          missedUpdates.push(update);
+
+          for (const listener of iconListeners) {
+            listener(update);
+          }
           break;
         }
       }
@@ -312,7 +319,7 @@ function downloadIconFile(id: string, ...filenames: string[]) {
   );
 }
 
-async function fetchIcon(id: string, filename: string) {
+async function fetchIcon(filename: string): Promise<boolean> {
   const file = join(ICON_DIR, filename);
 
   try {
@@ -327,43 +334,45 @@ async function fetchIcon(id: string, filename: string) {
     return false;
   }
 
+  if (ongoingDownloads.has(filename)) {
+    return ongoingDownloads.get(filename)!;
+  }
+
   const ext = filename.split('.').pop();
+  
+  const downloadPromise = (async () => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // slight delay against rate limiting
 
-  try {
-    attemptedDownloads.add(filename);
+      const response = await fetch(`${ICON_SOURCE}/${ext}/${filename}`);
 
-    await new Promise((resolve) => setTimeout(resolve, 5000)); // slight delay to batch multiple requests for the same icon
+      if (response.ok && response.body) {
+        await mkdir(ICON_DIR, { recursive: true });
 
-    const response = await fetch(`${ICON_SOURCE}/${ext}/${filename}`);
-
-    if (response.ok && response.body) {
-      await mkdir(ICON_DIR, { recursive: true });
-
-      await finished(
-        Readable.fromWeb(response.body).pipe(
-          fs.createWriteStream(file, { flags: 'wx' })
-        )
-      );
-    } else {
-      return false;
+        await finished(
+          Readable.fromWeb(response.body).pipe(
+            fs.createWriteStream(file, { flags: 'wx' })
+          )
+        );
+        return true;
+      } else {
+        attemptedDownloads.add(filename);
+        return false;
+      }
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST') {
+        console.warn(`Failed to download icon: ${filename}`, error);
+        attemptedDownloads.add(filename);
+        return false;
+      }
+      return true;
+    } finally {
+      ongoingDownloads.delete(filename);
     }
-  } catch (error: any) {
-    if (error?.code !== 'EEXIST') {
-      console.warn(`Failed to download icon: ${filename}`, error);
+  })();
 
-      return false;
-    }
-  }
-
-  const update = { id, icon: filename };
-
-  missedUpdates.push(update);
-
-  for (const listener of iconListeners) {
-    listener(update);
-  }
-
-  return true;
+  ongoingDownloads.set(filename, downloadPromise);
+  return downloadPromise;
 }
 
 async function resolveIcon(
