@@ -1,3 +1,6 @@
+> This is a fork holding some changes in container detection and link behavior!
+> The original project can be found [here](https://github.com/satya164/home-dashboard)!
+
 # Dashboard
 
 A dashboard for homelab with auto-discovery of [Docker](https://www.docker.com/) containers and [Traefik](https://traefik.io/) domains.

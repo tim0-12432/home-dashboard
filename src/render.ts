@@ -4,12 +4,13 @@ import type { App } from './types.ts';
 
 const html = String.raw;
 
-export function render(config: z.infer<typeof schema>, apps: App[]) {
+export function render(userAgent: string, config: z.infer<typeof schema>, apps: App[]) {
   const wallpaper = config.wallpaper
     ? 'url' in config.wallpaper
       ? config.wallpaper.url
       : `/wallpapers/${config.wallpaper.file}`
     : null;
+  const isMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(userAgent);
 
   return html`
     <!DOCTYPE html>
@@ -56,8 +57,7 @@ export function render(config: z.infer<typeof schema>, apps: App[]) {
                           data-id="${app.id}"
                           data-index="${i}"
                           href="${app.url}"
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          ${isMobile ? '' : 'target="_blank" rel="noopener noreferrer"'}
                           class="app-tile"
                         >
                           <img class="app-icon" src=${app.icon ? `/icons/${app.icon}` : '/box.svg'} />

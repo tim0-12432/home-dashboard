@@ -24,7 +24,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.url === '/') {
-      await index(res);
+      await index(req, res);
     } else if (req.url.startsWith('/api/')) {
       await api(req.url, req, res);
     } else {
@@ -46,11 +46,12 @@ server.listen(port, host, () => {
   console.log(`Server is running at http://localhost:${port}\n`);
 });
 
-async function index(res: http.ServerResponse) {
+async function index(req: http.IncomingMessage, res: http.ServerResponse) {
   const config = await loadConfig();
   const apps = await discoverApps(config);
+  const userAgent = req.headers['user-agent'] || '';
 
-  const html = render(config, apps);
+  const html = render(userAgent, config, apps);
 
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.write(html);
